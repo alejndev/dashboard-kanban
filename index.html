@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tablero Kanban con Edición (contenteditable)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <style>
+    /* Estilos generales */
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+
+    /* Estilos para las tarjetas */
+    .task {
+      cursor: grab;
+      transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out, background-color 0.2s ease;
+      position: relative;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+      padding-bottom: 2.5rem;
+      min-height: 10ch;
+      /* Espacio extra abajo para botones */
+    }
+
+    .task:hover:not(.editing) {
+      /* Solo aplicar hover si no se está editando */
+      background-color: #f9fafb;
+    }
+
+    .task.dragging {
+      opacity: 0.5;
+      transform: scale(1.05);
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+      cursor: grabbing;
+    }
+
+    /* Estilo para el párrafo editable */
+    .task-content {
+      min-height: 1.5rem;
+      padding: 2px;
+      /* Pequeño padding para mejor apariencia al enfocar */
+      border-radius: 3px;
+      outline: none;
+      /* Quitar outline por defecto */
+      border: 1px solid transparent;
+      /* Borde transparente por defecto */
+    }
+
+    .task-content[contenteditable="true"] {
+      cursor: text;
+      border: 1px solid #cbd5e1;
+      /* Borde gris claro al editar */
+      background-color: #ffffff;
+      /* Fondo blanco al editar */
+      box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
+      /* Sombra interior sutil */
+    }
+
+    .column.drag-over {
+      background-color: rgba(0, 0, 0, 0.05);
+      border: 2px dashed #a5b4fc;
+      border-radius: 8px;
+    }
+
+    /* Contenedor para botones de acción */
+    .task-actions {
+      position: absolute;
+      bottom: 5px;
+      right: 5px;
+      display: flex;
+      gap: 4px;
+      /* Espacio entre botones */
+    }
+
+    /* Estilo botones de acción (iconos) */
+    .task-action-btn {
+      cursor: pointer;
+      color: #9ca3af;
+      /* gris */
+      padding: 4px;
+      border-radius: 50%;
+      background-color: rgba(230, 230, 230, 0.8);
+      line-height: 1;
+      display: flex;
+      /* Para centrar icono */
+      align-items: center;
+      justify-content: center;
+      transition: background-color 0.2s, color 0.2s;
+    }
+
+    .task-action-btn:hover {
+      background-color: rgba(200, 200, 200, 0.9);
+    }
+
+    /* Colores específicos al pasar el ratón */
+    .edit-btn:hover {
+      color: #3b82f6;
+    }
+
+    /* Azul */
+    .delete-btn:hover {
+      color: #ef4444;
+    }
+
+    /* Rojo */
+    .save-btn:hover {
+      color: #10b981;
+    }
+
+    /* Verde */
+
+    /* Visibilidad de botones */
+    .task .edit-btn,
+    .task .delete-btn,
+    .task .save-btn {
+      display: none;
+      /* Ocultos por defecto */
+    }
+
+    /* Mostrar Edit y Delete en hover (si no se edita) */
+    .task:hover:not(.editing) .edit-btn,
+    .task:hover:not(.editing) .delete-btn {
+      display: flex;
+    }
+
+    /* Mostrar Save y Delete durante la edición */
+    .task.editing .save-btn,
+    .task.editing .delete-btn {
+      /* Permitir borrar mientras se edita */
+      display: flex;
+    }
+
+    /* Ajustes para iconos Phosphor */
+    .ph {
+      font-size: 1.1rem;
+      vertical-align: middle;
+    }
+
+    .task-action-btn .ph {
+      font-size: 1rem;
+      /* Tamaño para iconos de acción */
+    }
+
+    .task .ph-user {
+      font-size: 1.2rem;
+      position: absolute;
+      /* Posicionar icono de usuario */
+      bottom: 6px;
+      left: 10px;
+      color: #9ca3af;
+    }
+
+    /* Ocultar icono usuario mientras se edita */
+    .task.editing .ph-user {
+      display: none;
+    }
+  </style>
+</head>
+
+<body class="bg-gradient-to-br from-teal-400 to-blue-600 min-h-screen p-4 md:p-8 font-sans">
+
+  <h1 class="text-3xl md:text-4xl font-bold text-white text-center mb-8 md:mb-12">Tablero Kanban</h1>
+
+  <div class="max-w-md mx-auto mb-8 p-4 bg-white/80 backdrop-blur-sm rounded-lg shadow-lg">
+    <h3 class="text-lg font-semibold mb-2 text-gray-700">Añadir Nueva Tarea (al Backlog)</h3>
+    <div class="flex flex-col sm:flex-row gap-2">
+      <input type="text" id="new-task-input" placeholder="Descripción de la tarea..."
+        class="flex-grow p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-pink-500">
+      <button id="add-task-btn"
+        class="bg-pink-500 hover:bg-pink-600 text-white font-bold py-2 px-4 rounded-md shadow transition duration-150 ease-in-out flex items-center justify-center gap-1">
+        <i class="ph ph-plus"></i> Añadir
+      </button>
+    </div>
+  </div>
+
+  <div class="kanban-board grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+
+    <div id="backlog"
+      class="column bg-white/80 backdrop-blur-sm rounded-lg shadow-lg p-4 flex flex-col gap-4 min-h-[300px]"
+      ondragover="allowDrop(event)" ondrop="drop(event)" ondragleave="dragLeave(event)">
+      <h2
+        class="text-xl font-semibold text-center bg-pink-500 text-white py-2 px-4 rounded-md shadow mb-4 sticky top-0 z-10">
+        Backlog</h2>
+    </div>
+
+    <div id="doing"
+      class="column bg-white/80 backdrop-blur-sm rounded-lg shadow-lg p-4 flex flex-col gap-4 min-h-[300px]"
+      ondragover="allowDrop(event)" ondrop="drop(event)" ondragleave="dragLeave(event)">
+      <h2
+        class="text-xl font-semibold text-center bg-yellow-500 text-white py-2 px-4 rounded-md shadow mb-4 sticky top-0 z-10">
+        Doing</h2>
+    </div>
+
+    <div id="review"
+      class="column bg-white/80 backdrop-blur-sm rounded-lg shadow-lg p-4 flex flex-col gap-4 min-h-[300px]"
+      ondragover="allowDrop(event)" ondrop="drop(event)" ondragleave="dragLeave(event)">
+      <h2
+        class="text-xl font-semibold text-center bg-green-500 text-white py-2 px-4 rounded-md shadow mb-4 sticky top-0 z-10">
+        Review</h2>
+    </div>
+
+    <div id="done"
+      class="column bg-white/80 backdrop-blur-sm rounded-lg shadow-lg p-4 flex flex-col gap-4 min-h-[300px]"
+      ondragover="allowDrop(event)" ondrop="drop(event)" ondragleave="dragLeave(event)">
+      <h2
+        class="text-xl font-semibold text-center bg-cyan-500 text-white py-2 px-4 rounded-md shadow mb-4 sticky top-0 z-10">
+        Done</h2>
+    </div>
+
+  </div>
+
+  <script>
+    let draggedTaskId = null;
+    let draggedElement = null;
+    let activeEditingElement = null; // Guarda el PÁRRAFO que se está editando activamente
+    let originalTaskText = ''; // Guarda el texto original al iniciar edición
+
+    // --- Funciones de Arrastrar y Soltar (Drag and Drop) ---
+
+    function drag(ev) {
+      // No permitir arrastrar si se está editando una tarea
+      if (activeEditingElement || !ev.target.classList.contains('task')) {
+        ev.preventDefault();
+        return;
+      }
+      draggedTaskId = ev.target.id;
+      draggedElement = ev.target;
+      setTimeout(() => {
+        if (draggedElement) draggedElement.classList.add('dragging');
+      }, 0);
+      ev.dataTransfer.setData("text/plain", draggedTaskId);
+      ev.dataTransfer.effectAllowed = 'move';
+    }
+
+    function allowDrop(ev) {
+      ev.preventDefault();
+      const column = ev.target.closest('.column');
+      if (column && !column.classList.contains('drag-over')) {
+        document.querySelectorAll('.column.drag-over').forEach(col => col.classList.remove('drag-over'));
+        column.classList.add('drag-over');
+      }
+      ev.dataTransfer.dropEffect = 'move';
+    }
+
+    function dragLeave(ev) {
+      const column = ev.target.closest('.column');
+      if (column && (!ev.relatedTarget || !column.contains(ev.relatedTarget))) {
+        column.classList.remove('drag-over');
+      }
+    }
+
+    function drop(ev) {
+      ev.preventDefault();
+      const taskId = ev.dataTransfer.getData("text/plain");
+      const taskElement = document.getElementById(taskId);
+      const dropZone = ev.target.closest('.column');
+
+      document.querySelectorAll('.column.drag-over').forEach(col => col.classList.remove('drag-over'));
+
+      if (dropZone && taskElement && dropZone.classList.contains('column')) {
+        const titleElement = dropZone.querySelector('h2');
+        if (titleElement) {
+          dropZone.insertBefore(taskElement, titleElement.nextSibling);
+        } else {
+          dropZone.appendChild(taskElement);
+        }
+        saveState();
+      }
+
+      if (draggedElement) {
+        draggedElement.classList.remove('dragging');
+      }
+      draggedTaskId = null;
+      draggedElement = null;
+    }
+
+    function handleDragEnd(ev) {
+      if (draggedElement) {
+        draggedElement.classList.remove('dragging');
+      }
+      document.querySelectorAll('.column.drag-over').forEach(col => col.classList.remove('drag-over'));
+      draggedTaskId = null;
+      draggedElement = null;
+    }
+
+
+    // --- Funcionalidad Añadir/Eliminar/Editar Tareas ---
+
+    function generateUniqueId() {
+      return 'task-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9);
+    }
+
+    /**
+     * Crea el elemento HTML para una nueva tarea.
+     * @param {string} id - El ID único para la nueva tarea.
+     * @param {string} text - El texto/descripción de la tarea.
+     * @returns {HTMLElement} El elemento de la tarea creado.
+     */
+    function createTaskElement(id, text) {
+      const task = document.createElement('div');
+      task.id = id;
+      task.className = 'task bg-white p-3 rounded-md shadow border border-gray-200';
+      task.draggable = true; // Draggable por defecto
+      task.ondragstart = drag;
+      task.ondragend = handleDragEnd;
+
+      // Párrafo para el contenido (editable)
+      const content = document.createElement('p');
+      content.className = 'task-content font-medium text-gray-800 mb-1'; // Clase específica
+      content.textContent = text;
+      content.contentEditable = false; // No editable por defecto
+      // Eventos para manejar la edición (se añadirán dinámicamente)
+      content.addEventListener('keydown', handleParagraphKeyDown);
+      content.addEventListener('blur', handleParagraphBlur); // Guardar al perder foco
+      task.appendChild(content);
+
+      // Icono de usuario (placeholder)
+      const userIcon = document.createElement('i');
+      userIcon.className = 'ph ph-user'; // Posicionado con CSS
+      task.appendChild(userIcon);
+
+      // Contenedor de botones de acción
+      const actionsContainer = document.createElement('div');
+      actionsContainer.className = 'task-actions';
+
+      // Botón de Editar
+      const editBtn = document.createElement('span');
+      editBtn.className = 'task-action-btn edit-btn';
+      editBtn.title = 'Editar tarea'; // Tooltip
+      editBtn.onclick = enableEditing;
+      const editIcon = document.createElement('i');
+      editIcon.className = 'ph ph-pencil-simple';
+      editBtn.appendChild(editIcon);
+      actionsContainer.appendChild(editBtn);
+
+      // Botón de Guardar (oculto inicialmente)
+      const saveBtn = document.createElement('span');
+      saveBtn.className = 'task-action-btn save-btn';
+      saveBtn.title = 'Guardar cambios';
+      saveBtn.onclick = saveEditClick; // Función específica para el clic del botón
+      const saveIcon = document.createElement('i');
+      saveIcon.className = 'ph ph-check';
+      saveBtn.appendChild(saveIcon);
+      actionsContainer.appendChild(saveBtn);
+
+      // Botón de eliminar
+      const deleteBtn = document.createElement('span');
+      deleteBtn.className = 'task-action-btn delete-btn';
+      deleteBtn.title = 'Eliminar tarea';
+      deleteBtn.onclick = removeTask;
+      const deleteIcon = document.createElement('i');
+      deleteIcon.className = 'ph ph-trash'; // Icono de papelera
+      deleteBtn.appendChild(deleteIcon);
+      actionsContainer.appendChild(deleteBtn);
+
+      task.appendChild(actionsContainer);
+
+      return task;
+    }
+
+    function addTask() {
+      const input = document.getElementById('new-task-input');
+      const taskText = input.value.trim();
+
+      if (taskText === '') {
+        input.classList.add('border-red-500', 'ring-red-500');
+        input.placeholder = '¡La descripción no puede estar vacía!';
+        setTimeout(() => {
+          input.classList.remove('border-red-500', 'ring-red-500');
+          input.placeholder = 'Descripción de la tarea...';
+        }, 2000);
+        return;
+      }
+
+      const taskId = generateUniqueId();
+      const newTaskElement = createTaskElement(taskId, taskText);
+
+      const backlogColumn = document.getElementById('backlog');
+      const titleElement = backlogColumn.querySelector('h2');
+      if (titleElement) {
+        backlogColumn.insertBefore(newTaskElement, titleElement.nextSibling);
+      } else {
+        backlogColumn.appendChild(newTaskElement);
+      }
+
+      input.value = '';
+      saveState();
+    }
+
+    function removeTask(ev) {
+      ev.stopPropagation();
+      const taskElement = ev.target.closest('.task');
+
+      // Si se está editando esta tarea, cancelarla primero
+      if (taskElement && taskElement.classList.contains('editing')) {
+        const contentP = taskElement.querySelector('.task-content');
+        cancelEdit(taskElement, contentP); // Llama a cancelar edición
+      }
+
+      if (taskElement) {
+        taskElement.remove();
+        saveState();
+      }
+    }
+
+    /**
+     * Habilita el modo de edición para una tarea al hacer clic en el icono de lápiz.
+     * @param {Event} ev - El evento click del botón de editar.
+     */
+    function enableEditing(ev) {
+      ev.stopPropagation(); // Evitar que eventos se propaguen
+      const editButton = ev.currentTarget;
+      const taskElement = editButton.closest('.task');
+      const contentP = taskElement.querySelector('.task-content');
+
+      // Si ya se está editando otro elemento, guardarlo o cancelarlo primero
+      if (activeEditingElement && activeEditingElement !== contentP) {
+        activeEditingElement.blur(); // Forzar guardado/cancelación del anterior
+      }
+      // Si se hace clic en editar sobre el elemento ya activo, no hacer nada
+      if (activeEditingElement === contentP) return;
+
+
+      activeEditingElement = contentP; // Guardar referencia al párrafo editable
+      originalTaskText = contentP.textContent; // Guardar texto original
+
+      taskElement.classList.add('editing'); // Cambiar visibilidad de botones
+      taskElement.draggable = false; // Deshabilitar drag & drop
+
+      contentP.contentEditable = true; // Hacer editable
+      contentP.focus(); // Poner foco
+
+      // Seleccionar todo el texto (opcional, mejora UX)
+      const range = document.createRange();
+      range.selectNodeContents(contentP);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+
+    /**
+     * Deshabilita el modo de edición para una tarea.
+     * @param {HTMLElement} taskElement - El elemento de la tarea.
+     * @param {HTMLElement} contentP - El párrafo de contenido.
+     */
+    function disableEditing(taskElement, contentP) {
+      if (!taskElement || !contentP) return;
+
+      contentP.contentEditable = false; // Quitar edición
+      taskElement.classList.remove('editing'); // Cambiar visibilidad de botones
+      taskElement.draggable = true; // Habilitar drag & drop
+
+      if (activeEditingElement === contentP) {
+        activeEditingElement = null; // Limpiar referencia
+        originalTaskText = ''; // Limpiar texto original guardado
+      }
+    }
+
+    /**
+     * Guarda la edición (llamado desde botón save o Enter).
+     * @param {HTMLElement} taskElement - El elemento de la tarea.
+     * @param {HTMLElement} contentP - El párrafo de contenido.
+     * @param {boolean} forceSave - Indica si se debe guardar incluso si el texto no cambió (útil para blur).
+     */
+    function saveEdit(taskElement, contentP, forceSave = false) {
+      if (!taskElement || !contentP || activeEditingElement !== contentP) return; // Solo guardar si es el elemento activo
+
+      const newText = contentP.textContent.trim();
+
+      if (newText === '') {
+        console.warn("La descripción no puede estar vacía. Revertiendo a original.");
+        contentP.textContent = originalTaskText; // Revertir
+      } else if (newText !== originalTaskText || forceSave) {
+        // El texto ya está actualizado en el DOM por contenteditable
+        console.log("Cambios guardados.");
+        saveState(); // Guardar el estado general del tablero
+      } else {
+        console.log("No hubo cambios para guardar.");
+      }
+
+      disableEditing(taskElement, contentP); // Salir del modo edición
+    }
+
+    /**
+     * Cancela la edición, revirtiendo al texto original.
+     * @param {HTMLElement} taskElement - El elemento de la tarea.
+     * @param {HTMLElement} contentP - El párrafo de contenido.
+     */
+    function cancelEdit(taskElement, contentP) {
+      if (!taskElement || !contentP || activeEditingElement !== contentP) return; // Solo cancelar si es el elemento activo
+
+      console.log("Edición cancelada.");
+      contentP.textContent = originalTaskText; // Revertir al texto original
+      disableEditing(taskElement, contentP); // Salir del modo edición
+    }
+
+    /**
+     * Maneja el clic en el botón de guardar.
+     * @param {Event} ev - El evento click.
+     */
+    function saveEditClick(ev) {
+      ev.stopPropagation();
+      const saveButton = ev.currentTarget;
+      const taskElement = saveButton.closest('.task');
+      const contentP = taskElement.querySelector('.task-content');
+      saveEdit(taskElement, contentP, true); // Forzar guardado al hacer clic
+    }
+
+
+    /**
+     * Maneja las teclas Enter y Escape durante la edición en el párrafo.
+     * @param {KeyboardEvent} ev - El evento keydown.
+     */
+    function handleParagraphKeyDown(ev) {
+      const contentP = ev.target;
+      if (!contentP.isContentEditable) return; // Salir si no está en modo edición
+
+      const taskElement = contentP.closest('.task');
+
+      if (ev.key === 'Enter' && !ev.shiftKey) {
+        ev.preventDefault(); // Prevenir nueva línea en contenteditable
+        saveEdit(taskElement, contentP, true); // Guardar al presionar Enter
+      } else if (ev.key === 'Escape') {
+        ev.preventDefault(); // Prevenir cualquier acción por defecto de Escape
+        cancelEdit(taskElement, contentP); // Cancelar al presionar Escape
+      }
+      // Permitir Shift+Enter para nuevas líneas si se desea (actualmente no se maneja explícitamente)
+    }
+
+    /**
+     * Maneja la pérdida de foco del párrafo editable.
+     * @param {FocusEvent} ev - El evento blur.
+     */
+    function handleParagraphBlur(ev) {
+      const contentP = ev.target;
+      if (!contentP.isContentEditable || activeEditingElement !== contentP) return; // Salir si no es el elemento activo
+
+      const taskElement = contentP.closest('.task');
+
+      // Usar un pequeño timeout para evitar problemas si el blur ocurre
+      // inmediatamente después de hacer clic en Guardar o presionar Enter/Escape.
+      setTimeout(() => {
+        // Volver a verificar si todavía estamos en modo de edición para este elemento
+        // (podría haberse salido ya por Enter/Escape/clic en Guardar)
+        if (activeEditingElement === contentP) {
+          console.log("Guardando por blur...");
+          saveEdit(taskElement, contentP, false); // Guardar si hubo cambios
+        }
+      }, 100); // 100ms de retraso
+    }
+
+
+    // --- Persistencia de Estado en URL ---
+
+    function saveState() {
+      // No guardar si hay una edición activa (evita guardar estados intermedios)
+      if (activeEditingElement) {
+        console.warn("Guardado de estado omitido durante edición activa.");
+        return;
+      }
+
+      const state = {};
+      document.querySelectorAll('.column').forEach(column => {
+        const columnId = column.id;
+        const tasks = [];
+        column.querySelectorAll(':scope > .task').forEach(task => {
+          const contentElement = task.querySelector('p.task-content');
+          if (contentElement) {
+            tasks.push({
+              id: task.id,
+              text: contentElement.textContent // Obtener texto directamente del párrafo
+            });
+          }
+        });
+        state[columnId] = tasks;
+      });
+
+      try {
+        const jsonState = JSON.stringify(state);
+        if (jsonState === '{}' && window.location.hash === '') {
+          return;
+        }
+        const base64State = btoa(unescape(encodeURIComponent(jsonState)));
+        const currentHash = window.location.hash.substring(1);
+        if (base64State !== currentHash) {
+          history.replaceState(null, '', '#' + base64State);
+        }
+      } catch (e) {
+        console.error("Error al guardar el estado:", e);
+      }
+    }
+
+    function loadState() {
+      // Cancelar edición activa si existe antes de cargar
+      if (activeEditingElement) {
+        const taskElem = activeEditingElement.closest('.task');
+        cancelEdit(taskElem, activeEditingElement);
+      }
+
+      document.querySelectorAll('.column .task').forEach(task => task.remove());
+
+      if (window.location.hash && window.location.hash.length > 1) {
+        try {
+          const base64State = window.location.hash.substring(1);
+          const jsonState = decodeURIComponent(escape(atob(base64State)));
+          const state = JSON.parse(jsonState);
+
+          Object.keys(state).forEach(columnId => {
+            const column = document.getElementById(columnId);
+            if (column) {
+              const titleElement = column.querySelector('h2');
+              state[columnId].reverse().forEach(taskData => {
+                if (taskData.id && typeof taskData.text === 'string') {
+                  const taskElement = createTaskElement(taskData.id, taskData.text);
+                  if (titleElement) {
+                    column.insertBefore(taskElement, titleElement.nextSibling);
+                  } else {
+                    column.appendChild(taskElement);
+                  }
+                }
+              });
+            }
+          });
+        } catch (e) {
+          console.error("Error al cargar el estado desde la URL:", e);
+          history.replaceState(null, '', window.location.pathname + window.location.search);
+          loadDefaultTasks();
+        }
+      } else {
+        loadDefaultTasks();
+      }
+    }
+
+    function loadDefaultTasks() {
+      saveState(); // Guardar estado vacío inicial si es necesario.
+    }
+
+
+    // --- Inicialización ---
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('add-task-btn').addEventListener('click', addTask);
+      document.getElementById('new-task-input').addEventListener('keypress', function (event) {
+        if (event.key === 'Enter') {
+          addTask();
+        }
+      });
+
+      loadState();
+      window.addEventListener('hashchange', loadState);
+    });
+
+  </script>
+
+</body>
+
+</html>
