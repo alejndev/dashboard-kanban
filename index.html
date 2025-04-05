@@ -8,6 +8,12 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/@phosphor-icons/web"></script>
   <style>
+    /* Variables CSS personalizadas */
+    :root {
+      --edit-buttons-display: flex;
+      /* Valor por defecto: mostrar botones */
+    }
+
     /* Estilos generales */
     body {
       font-family: 'Inter', sans-serif;
@@ -123,7 +129,7 @@
     /* Mostrar Edit y Delete en hover (si no se edita) */
     .task:hover:not(.editing) .edit-btn,
     .task:hover:not(.editing) .delete-btn {
-      display: flex;
+      display: var(--edit-buttons-display);
     }
 
     /* Mostrar Save y Delete durante la edición */
@@ -217,6 +223,7 @@
     let draggedElement = null;
     let activeEditingElement = null; // Guarda el PÁRRAFO que se está editando activamente
     let originalTaskText = ''; // Guarda el texto original al iniciar edición
+    let editMode = true; // Por defecto, modo edición activado
 
     // --- Funciones de Arrastrar y Soltar (Drag and Drop) ---
 
@@ -362,6 +369,9 @@
     }
 
     function addTask() {
+      // Si el modo de edición está desactivado, no permitir añadir tareas
+      if (!editMode) return;
+
       const input = document.getElementById('new-task-input');
       const taskText = input.value.trim();
 
@@ -391,6 +401,9 @@
     }
 
     function removeTask(ev) {
+      // Si el modo de edición está desactivado, no permitir eliminar tareas
+      if (!editMode) return;
+
       ev.stopPropagation();
       const taskElement = ev.target.closest('.task');
 
@@ -411,6 +424,9 @@
      * @param {Event} ev - El evento click del botón de editar.
      */
     function enableEditing(ev) {
+      // Si el modo de edición está desactivado, no permitir editar
+      if (!editMode) return;
+
       ev.stopPropagation(); // Evitar que eventos se propaguen
       const editButton = ev.currentTarget;
       const taskElement = editButton.closest('.task');
@@ -556,11 +572,8 @@
     // --- Persistencia de Estado en URL ---
 
     function saveState() {
-      // No guardar si hay una edición activa (evita guardar estados intermedios)
-      if (activeEditingElement) {
-        console.warn("Guardado de estado omitido durante edición activa.");
-        return;
-      }
+      // Permitir guardar incluso durante edición activa para persistir cambios inmediatamente
+      // La verificación anterior impedía guardar al presionar Enter
 
       const state = {};
       document.querySelectorAll('.column').forEach(column => {
@@ -580,16 +593,62 @@
 
       try {
         const jsonState = JSON.stringify(state);
-        if (jsonState === '{}' && window.location.hash === '') {
+        if (jsonState === '{}' && !new URLSearchParams(window.location.search).has('data')) {
           return;
         }
         const base64State = btoa(unescape(encodeURIComponent(jsonState)));
-        const currentHash = window.location.hash.substring(1);
-        if (base64State !== currentHash) {
-          history.replaceState(null, '', '#' + base64State);
+
+        // Usar URLSearchParams para manejar los parámetros de la URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const currentData = urlParams.get('data');
+        const editParam = urlParams.get('edit');
+
+        if (base64State !== currentData) {
+          urlParams.set('data', base64State);
+          // Mantener el parámetro edit si existe
+          if (editParam !== null) {
+            urlParams.set('edit', editParam);
+          }
+          // Actualizar la URL con los parámetros
+          history.replaceState(null, '', `${window.location.pathname}?${urlParams.toString()}`);
         }
       } catch (e) {
         console.error("Error al guardar el estado:", e);
+      }
+    }
+
+    // Función para verificar el modo de edición desde la URL
+    function checkEditMode() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const editParam = urlParams.get('edit');
+
+      // Si el parámetro edit existe y es '0', desactivar modo edición
+      if (editParam === '0') {
+        editMode = false;
+      } else {
+        editMode = true; // Por defecto o si es '1', activar modo edición
+      }
+
+      // Aplicar el modo de edición a la interfaz
+      applyEditMode();
+    }
+
+    // Función para aplicar el modo de edición a la interfaz
+    function applyEditMode() {
+      const addTaskSection = document.querySelector('.max-w-md.mx-auto.mb-8');
+
+      if (editMode) {
+        // Mostrar sección de añadir tarea
+        if (addTaskSection) addTaskSection.style.display = 'block';
+
+        // Permitir que los botones de editar/eliminar se muestren al pasar el ratón
+        document.documentElement.style.setProperty('--edit-buttons-display', 'flex');
+      } else {
+        // Ocultar sección de añadir tarea
+        if (addTaskSection) addTaskSection.style.display = 'none';
+
+        // Ocultar botones de editar/eliminar permanentemente
+        document.documentElement.style.setProperty('--edit-buttons-display', 'none');
       }
     }
 
@@ -602,9 +661,15 @@
 
       document.querySelectorAll('.column .task').forEach(task => task.remove());
 
-      if (window.location.hash && window.location.hash.length > 1) {
+      // Obtener el parámetro 'data' de la URL
+      const urlParams = new URLSearchParams(window.location.search);
+      const base64State = urlParams.get('data');
+
+      // Verificar el modo de edición
+      checkEditMode();
+
+      if (base64State) {
         try {
-          const base64State = window.location.hash.substring(1);
           const jsonState = decodeURIComponent(escape(atob(base64State)));
           const state = JSON.parse(jsonState);
 
@@ -626,7 +691,8 @@
           });
         } catch (e) {
           console.error("Error al cargar el estado desde la URL:", e);
-          history.replaceState(null, '', window.location.pathname + window.location.search);
+          // Limpiar el parámetro data en caso de error
+          history.replaceState(null, '', window.location.pathname);
           loadDefaultTasks();
         }
       } else {
