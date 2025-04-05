@@ -228,8 +228,8 @@
     // --- Funciones de Arrastrar y Soltar (Drag and Drop) ---
 
     function drag(ev) {
-      // No permitir arrastrar si se está editando una tarea
-      if (activeEditingElement || !ev.target.classList.contains('task')) {
+      // No permitir arrastrar si se está editando una tarea o si el modo de edición está desactivado
+      if (activeEditingElement || !ev.target.classList.contains('task') || !editMode) {
         ev.preventDefault();
         return;
       }
@@ -243,6 +243,11 @@
     }
 
     function allowDrop(ev) {
+      // No permitir soltar si el modo de edición está desactivado
+      if (!editMode) {
+        ev.preventDefault();
+        return;
+      }
       ev.preventDefault();
       const column = ev.target.closest('.column');
       if (column && !column.classList.contains('drag-over')) {
@@ -260,6 +265,12 @@
     }
 
     function drop(ev) {
+      // No permitir soltar si el modo de edición está desactivado
+      if (!editMode) {
+        ev.preventDefault();
+        return;
+      }
+
       ev.preventDefault();
       const taskId = ev.dataTransfer.getData("text/plain");
       const taskElement = document.getElementById(taskId);
@@ -310,7 +321,7 @@
       const task = document.createElement('div');
       task.id = id;
       task.className = 'task bg-white p-3 rounded-md shadow border border-gray-200';
-      task.draggable = true; // Draggable por defecto
+      task.draggable = editMode; // Draggable solo si el modo de edición está activado
       task.ondragstart = drag;
       task.ondragend = handleDragEnd;
 
@@ -643,12 +654,22 @@
 
         // Permitir que los botones de editar/eliminar se muestren al pasar el ratón
         document.documentElement.style.setProperty('--edit-buttons-display', 'flex');
+
+        // Habilitar drag & drop para todas las tareas existentes
+        document.querySelectorAll('.task').forEach(task => {
+          task.draggable = true;
+        });
       } else {
         // Ocultar sección de añadir tarea
         if (addTaskSection) addTaskSection.style.display = 'none';
 
         // Ocultar botones de editar/eliminar permanentemente
         document.documentElement.style.setProperty('--edit-buttons-display', 'none');
+
+        // Deshabilitar drag & drop para todas las tareas existentes
+        document.querySelectorAll('.task').forEach(task => {
+          task.draggable = false;
+        });
       }
     }
 
