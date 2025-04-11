@@ -320,14 +320,14 @@
     function createTaskElement(id, text) {
       const task = document.createElement('div');
       task.id = id;
-      task.className = 'task bg-white p-5 rounded-md shadow border border-gray-200';
+      task.className = 'task bg-white p-2 rounded-md shadow border border-gray-200';
       task.draggable = editMode; // Draggable solo si el modo de edición está activado
       task.ondragstart = drag;
       task.ondragend = handleDragEnd;
 
       // Párrafo para el contenido (editable)
       const content = document.createElement('p');
-      content.className = 'task-content font-medium text-gray-800 mb-1'; // Clase específica
+      content.className = 'task-content font-medium text-gray-800 mb-5'; // Clase específica
       content.textContent = text;
       content.contentEditable = false; // No editable por defecto
       // Eventos para manejar la edición (se añadirán dinámicamente)
