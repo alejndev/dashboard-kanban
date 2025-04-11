@@ -800,7 +800,8 @@
 
     // --- Funcionalidad Botón Compartir ---
     function copyShareLink() {
-      const currentUrl = new URL(`https://is.gd/create.php?format=simple&url=${window.location.href}&edit=0`);
+      const url = `${window.location.href}&edit=0`;
+      const currentUrl = new URL(`https://is.gd/create.php?format=simple&url=${encodeURIComponent(url)}`);
       // currentUrl.searchParams.set('edit', '0'); // Asegurar que el modo sea solo lectura
       const shareUrl = currentUrl.toString();
 
