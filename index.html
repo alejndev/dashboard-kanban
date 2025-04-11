@@ -320,7 +320,7 @@
     function createTaskElement(id, text) {
       const task = document.createElement('div');
       task.id = id;
-      task.className = 'task bg-white p-3 rounded-md shadow border border-gray-200';
+      task.className = 'task bg-white p-5 rounded-md shadow border border-gray-200';
       task.draggable = editMode; // Draggable solo si el modo de edición está activado
       task.ondragstart = drag;
       task.ondragend = handleDragEnd;
