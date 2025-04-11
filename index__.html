@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tablero Kanban</title>
+  <title>Tablero Kanban con Edición (contenteditable)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/@phosphor-icons/web"></script>
   <style>
@@ -163,31 +163,14 @@
     .task.editing .ph-user {
       display: none;
     }
-
-    /* Estilo para el botón de compartir */
-    #share-button {
-      transition: background-color 0.2s, color 0.2s, transform 0.1s;
-    }
-
-    #share-button:active {
-      transform: scale(0.95);
-      /* Efecto de clic */
-    }
   </style>
 </head>
 
 <body class="bg-gradient-to-br from-teal-400 to-blue-600 min-h-screen p-4 md:p-8 font-sans">
 
-  <div class="flex flex-col sm:flex-row justify-center items-center gap-4 mb-8 md:mb-12">
-    <h1 class="text-3xl md:text-4xl font-bold text-white text-center">Tablero Kanban</h1>
-    <button id="share-button" title="Copiar enlace de solo lectura"
-      class="bg-white/80 hover:bg-white/95 backdrop-blur-sm text-gray-700 font-semibold py-2 px-4 rounded-lg shadow-md flex items-center gap-2">
-      <i class="ph ph-share-network"></i>
-      <span id="share-button-text">Compartir (Solo Lectura)</span>
-    </button>
-  </div>
+  <h1 class="text-3xl md:text-4xl font-bold text-white text-center mb-8 md:mb-12">Tablero Kanban</h1>
 
-  <div class="max-w-md mx-auto mb-8 p-4 bg-white/80 backdrop-blur-sm rounded-lg shadow-lg" id="add-task-section">
+  <div class="max-w-md mx-auto mb-8 p-4 bg-white/80 backdrop-blur-sm rounded-lg shadow-lg">
     <h3 class="text-lg font-semibold mb-2 text-gray-700">Añadir Nueva Tarea (al Backlog)</h3>
     <div class="flex flex-col sm:flex-row gap-2">
       <input type="text" id="new-task-input" placeholder="Descripción de la tarea..."
@@ -262,7 +245,6 @@
     function allowDrop(ev) {
       // No permitir soltar si el modo de edición está desactivado
       if (!editMode) {
-        // Aunque no permitamos soltar, prevenimos el default para que funcione dragLeave correctamente
         ev.preventDefault();
         return;
       }
@@ -286,14 +268,6 @@
       // No permitir soltar si el modo de edición está desactivado
       if (!editMode) {
         ev.preventDefault();
-        // Limpiar el estado visual de drag-over si se intenta soltar
-        document.querySelectorAll('.column.drag-over').forEach(col => col.classList.remove('drag-over'));
-        // Limpiar estado de arrastre si es necesario (aunque no debería llegar aquí si drag() lo impide)
-        if (draggedElement) {
-          draggedElement.classList.remove('dragging');
-        }
-        draggedTaskId = null;
-        draggedElement = null;
         return;
       }
 
@@ -305,18 +279,10 @@
       document.querySelectorAll('.column.drag-over').forEach(col => col.classList.remove('drag-over'));
 
       if (dropZone && taskElement && dropZone.classList.contains('column')) {
-        // Intentar insertar después del título h2
         const titleElement = dropZone.querySelector('h2');
-        // Encontrar el primer elemento .task existente para insertar antes que él
-        const firstTask = dropZone.querySelector('.task');
-
-        if (firstTask) {
-          dropZone.insertBefore(taskElement, firstTask); // Insertar antes de la primera tarea
-        } else if (titleElement) {
-          // Si no hay tareas, insertar después del título
+        if (titleElement) {
           dropZone.insertBefore(taskElement, titleElement.nextSibling);
         } else {
-          // Como fallback, añadir al final si no hay título ni tareas
           dropZone.appendChild(taskElement);
         }
         saveState();
@@ -434,12 +400,11 @@
       const newTaskElement = createTaskElement(taskId, taskText);
 
       const backlogColumn = document.getElementById('backlog');
-      // Insertar siempre después del H2 si existe, sino al principio
       const titleElement = backlogColumn.querySelector('h2');
       if (titleElement) {
         backlogColumn.insertBefore(newTaskElement, titleElement.nextSibling);
       } else {
-        backlogColumn.prepend(newTaskElement); // Añadir al principio si no hay título
+        backlogColumn.appendChild(newTaskElement);
       }
 
       input.value = '';
@@ -513,8 +478,7 @@
 
       contentP.contentEditable = false; // Quitar edición
       taskElement.classList.remove('editing'); // Cambiar visibilidad de botones
-      // Solo volver a habilitar drag si el modo global de edición está activo
-      taskElement.draggable = editMode;
+      taskElement.draggable = true; // Habilitar drag & drop
 
       if (activeEditingElement === contentP) {
         activeEditingElement = null; // Limpiar referencia
@@ -626,7 +590,6 @@
       document.querySelectorAll('.column').forEach(column => {
         const columnId = column.id;
         const tasks = [];
-        // Seleccionar solo los elementos .task que son hijos directos de la columna
         column.querySelectorAll(':scope > .task').forEach(task => {
           const contentElement = task.querySelector('p.task-content');
           if (contentElement) {
@@ -641,33 +604,21 @@
 
       try {
         const jsonState = JSON.stringify(state);
-        // Evitar guardar un estado vacío si no hay datos en la URL
-        if (jsonState === '{"backlog":[],"doing":[],"review":[],"done":[]}' && !new URLSearchParams(window.location.search).has('data')) {
-          // Si el estado está vacío y no hay 'data' en la URL, no hacer nada
-          // Opcionalmente, limpiar la URL si se desea
-          // const urlParams = new URLSearchParams(window.location.search);
-          // if (urlParams.has('data')) {
-          //     urlParams.delete('data');
-          //     const editParam = urlParams.get('edit');
-          //     const newSearch = editParam !== null ? `?edit=${editParam}` : '';
-          //     history.replaceState(null, '', `${window.location.pathname}${newSearch}`);
-          // }
+        if (jsonState === '{}' && !new URLSearchParams(window.location.search).has('data')) {
           return;
         }
-
         const base64State = btoa(unescape(encodeURIComponent(jsonState)));
 
         // Usar URLSearchParams para manejar los parámetros de la URL
         const urlParams = new URLSearchParams(window.location.search);
         const currentData = urlParams.get('data');
-        const editParam = urlParams.get('edit'); // Leer el parámetro edit actual
+        const editParam = urlParams.get('edit');
 
-        // Actualizar solo si el estado ha cambiado
         if (base64State !== currentData) {
           urlParams.set('data', base64State);
-          // Mantener el parámetro 'edit' si ya existe, no lo sobrescribimos aquí
+          // Mantener el parámetro edit si existe
           if (editParam !== null) {
-            urlParams.set('edit', editParam); // Asegurarse de que se mantenga
+            urlParams.set('edit', editParam);
           }
           // Actualizar la URL con los parámetros
           history.replaceState(null, '', `${window.location.pathname}?${urlParams.toString()}`);
@@ -676,7 +627,6 @@
         console.error("Error al guardar el estado:", e);
       }
     }
-
 
     // Función para verificar el modo de edición desde la URL
     function checkEditMode() {
@@ -687,45 +637,39 @@
       if (editParam === '0') {
         editMode = false;
       } else {
-        editMode = true; // Por defecto o si es '1' o no existe, activar modo edición
+        editMode = true; // Por defecto o si es '1', activar modo edición
       }
 
       // Aplicar el modo de edición a la interfaz
-      applyEditModeUI();
+      applyEditMode();
     }
 
-    // Función para aplicar el modo de edición a la interfaz visualmente
-    function applyEditModeUI() {
-      const addTaskSection = document.getElementById('add-task-section');
-      const bodyElement = document.body; // Referencia al body
+    // Función para aplicar el modo de edición a la interfaz
+    function applyEditMode() {
+      const addTaskSection = document.querySelector('.max-w-md.mx-auto.mb-8');
 
       if (editMode) {
-        // Modo Edición: Mostrar sección de añadir, permitir hover en botones, habilitar drag
+        // Mostrar sección de añadir tarea
         if (addTaskSection) addTaskSection.style.display = 'block';
+
+        // Permitir que los botones de editar/eliminar se muestren al pasar el ratón
         document.documentElement.style.setProperty('--edit-buttons-display', 'flex');
+
+        // Habilitar drag & drop para todas las tareas existentes
         document.querySelectorAll('.task').forEach(task => {
           task.draggable = true;
         });
-        bodyElement.classList.remove('read-only-mode'); // Quitar clase de solo lectura
-        console.log("Modo Edición Activado");
-
       } else {
-        // Modo Solo Lectura: Ocultar sección de añadir, ocultar botones, deshabilitar drag
+        // Ocultar sección de añadir tarea
         if (addTaskSection) addTaskSection.style.display = 'none';
+
+        // Ocultar botones de editar/eliminar permanentemente
         document.documentElement.style.setProperty('--edit-buttons-display', 'none');
+
+        // Deshabilitar drag & drop para todas las tareas existentes
         document.querySelectorAll('.task').forEach(task => {
           task.draggable = false;
-          task.classList.remove('editing'); // Asegurarse de que ninguna tarea quede en estado de edición visual
-          const contentP = task.querySelector('.task-content');
-          if (contentP) contentP.contentEditable = false; // Asegurar que no sea editable
         });
-        // Cancelar cualquier edición activa
-        if (activeEditingElement) {
-          const taskElem = activeEditingElement.closest('.task');
-          cancelEdit(taskElem, activeEditingElement); // Usar cancelar para revertir si es necesario
-        }
-        bodyElement.classList.add('read-only-mode'); // Añadir clase para posible estilo futuro
-        console.log("Modo Solo Lectura Activado");
       }
     }
 
@@ -736,15 +680,14 @@
         cancelEdit(taskElem, activeEditingElement);
       }
 
-      // Limpiar columnas antes de cargar
       document.querySelectorAll('.column .task').forEach(task => task.remove());
-
-      // Verificar el modo de edición ANTES de cargar las tareas
-      checkEditMode();
 
       // Obtener el parámetro 'data' de la URL
       const urlParams = new URLSearchParams(window.location.search);
       const base64State = urlParams.get('data');
+
+      // Verificar el modo de edición
+      checkEditMode();
 
       if (base64State) {
         try {
@@ -755,15 +698,11 @@
             const column = document.getElementById(columnId);
             if (column) {
               const titleElement = column.querySelector('h2');
-              // Cargar tareas en el orden guardado (sin reverse)
-              state[columnId].forEach(taskData => {
+              state[columnId].reverse().forEach(taskData => {
                 if (taskData.id && typeof taskData.text === 'string') {
                   const taskElement = createTaskElement(taskData.id, taskData.text);
-                  // Insertar después del título si existe, sino al final
                   if (titleElement) {
                     column.insertBefore(taskElement, titleElement.nextSibling);
-                    // Mover al final para mantener el orden visual de inserción
-                    column.appendChild(taskElement);
                   } else {
                     column.appendChild(taskElement);
                   }
@@ -771,71 +710,24 @@
               });
             }
           });
-          // Aplicar el modo de edición a las tareas recién cargadas
-          applyEditModeUI();
         } catch (e) {
           console.error("Error al cargar el estado desde la URL:", e);
-          // Limpiar el parámetro data en caso de error y cargar estado por defecto
-          const urlParams = new URLSearchParams(window.location.search);
-          urlParams.delete('data');
-          const editParam = urlParams.get('edit');
-          const newSearch = editParam !== null ? `?edit=${editParam}` : '';
-          history.replaceState(null, '', `${window.location.pathname}${newSearch}`);
+          // Limpiar el parámetro data en caso de error
+          history.replaceState(null, '', window.location.pathname);
           loadDefaultTasks();
         }
       } else {
-        loadDefaultTasks(); // Cargar tareas por defecto si no hay 'data'
+        loadDefaultTasks();
       }
     }
 
     function loadDefaultTasks() {
-      // Aquí puedes definir tareas iniciales si lo deseas, o simplemente dejarlo vacío.
-      // Ejemplo:
-      // const backlog = document.getElementById('backlog');
-      // backlog.appendChild(createTaskElement(generateUniqueId(), 'Tarea de ejemplo 1'));
-      // backlog.appendChild(createTaskElement(generateUniqueId(), 'Tarea de ejemplo 2'));
-      // saveState(); // Guardar este estado por defecto si se añaden tareas aquí
-      applyEditModeUI(); // Asegurarse de aplicar el modo de edición correcto
-    }
-
-    // --- Funcionalidad Botón Compartir ---
-    function copyShareLink() {
-      const currentUrl = new URL(window.location.href);
-      currentUrl.searchParams.set('edit', '0'); // Asegurar que el modo sea solo lectura
-      const shareUrl = currentUrl.toString();
-
-      navigator.clipboard.writeText(shareUrl).then(() => {
-        // Éxito al copiar
-        const shareButton = document.getElementById('share-button');
-        const shareButtonText = document.getElementById('share-button-text');
-        const originalText = shareButtonText.textContent;
-        const originalIcon = shareButton.querySelector('i').className;
-
-        shareButtonText.textContent = '¡Enlace Copiado!';
-        shareButton.querySelector('i').className = 'ph ph-check-circle'; // Icono de check
-        shareButton.classList.add('bg-green-200'); // Fondo verde temporal
-
-        setTimeout(() => {
-          shareButtonText.textContent = originalText;
-          shareButton.querySelector('i').className = originalIcon;
-          shareButton.classList.remove('bg-green-200');
-        }, 2000); // Revertir después de 2 segundos
-      }).catch(err => {
-        // Error al copiar
-        console.error('Error al copiar al portapapeles: ', err);
-        const shareButtonText = document.getElementById('share-button-text');
-        const originalText = shareButtonText.textContent;
-        shareButtonText.textContent = 'Error al copiar';
-        setTimeout(() => {
-          shareButtonText.textContent = originalText;
-        }, 2000);
-      });
+      saveState(); // Guardar estado vacío inicial si es necesario.
     }
 
 
     // --- Inicialización ---
     document.addEventListener('DOMContentLoaded', () => {
-      // Añadir tarea
       document.getElementById('add-task-btn').addEventListener('click', addTask);
       document.getElementById('new-task-input').addEventListener('keypress', function (event) {
         if (event.key === 'Enter') {
@@ -843,33 +735,8 @@
         }
       });
 
-      // Botón de compartir
-      document.getElementById('share-button').addEventListener('click', copyShareLink);
-
-
-      // Cargar estado inicial
       loadState();
-
-      // Escuchar cambios en la URL (para atrás/adelante del navegador)
-      // Usamos popstate en lugar de hashchange si no usamos hash
-      window.addEventListener('popstate', loadState);
-
-      // Observador para cambios en el DOM que puedan afectar el estado (opcional, pero robusto)
-      // Esto ayuda si otras extensiones o scripts modifican las tareas
-      const boardObserver = new MutationObserver((mutationsList) => {
-        for (let mutation of mutationsList) {
-          // Ser más específico para evitar bucles infinitos con saveState
-          if (mutation.type === 'childList' &&
-            (mutation.target.classList.contains('column') || mutation.target.classList.contains('task-content'))) {
-            // Podríamos añadir un debounce aquí si saveState es costoso
-            // saveState(); // Descomentar con precaución, puede ser demasiado frecuente
-            break; // Solo necesitamos saber que algo cambió
-          }
-        }
-      });
-
-      //   boardObserver.observe(document.querySelector('.kanban-board'), { childList: true, subtree: true });
-
+      window.addEventListener('hashchange', loadState);
     });
 
   </script>
