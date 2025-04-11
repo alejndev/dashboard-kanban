@@ -800,36 +800,43 @@
 
     // --- Funcionalidad Botón Compartir ---
     function copyShareLink() {
-      const currentUrl = new URL(`https://is.gd/create.php?format=simple&url=${window.location.href}&edit=0`);
-      // currentUrl.searchParams.set('edit', '0'); // Asegurar que el modo sea solo lectura
-      const shareUrl = currentUrl.toString();
+      fetch(`https://is.gd/create.php?format=simple&url=${encodeURIComponent(window.location.href)}&edit=0`)
+        .then(response => response.text())
+        .then(shortUrl => {
+          const currentUrl = new URL(shortUrl);
+          // currentUrl.searchParams.set('edit', '0'); // Asegurar que el modo sea solo lectura
+          const shareUrl = currentUrl.toString();
 
-      navigator.clipboard.writeText(shareUrl).then(() => {
-        // Éxito al copiar
-        const shareButton = document.getElementById('share-button');
-        const shareButtonText = document.getElementById('share-button-text');
-        const originalText = shareButtonText.textContent;
-        const originalIcon = shareButton.querySelector('i').className;
+          navigator.clipboard.writeText(shareUrl).then(() => {
+            // Éxito al copiar
+            const shareButton = document.getElementById('share-button');
+            const shareButtonText = document.getElementById('share-button-text');
+            const originalText = shareButtonText.textContent;
+            const originalIcon = shareButton.querySelector('i').className;
 
-        shareButtonText.textContent = '¡Enlace Copiado!';
-        shareButton.querySelector('i').className = 'ph ph-check-circle'; // Icono de check
-        shareButton.classList.add('bg-green-200'); // Fondo verde temporal
+            shareButtonText.textContent = '¡Enlace Copiado!';
+            shareButton.querySelector('i').className = 'ph ph-check-circle'; // Icono de check
+            shareButton.classList.add('bg-green-200'); // Fondo verde temporal
 
-        setTimeout(() => {
-          shareButtonText.textContent = originalText;
-          shareButton.querySelector('i').className = originalIcon;
-          shareButton.classList.remove('bg-green-200');
-        }, 2000); // Revertir después de 2 segundos
-      }).catch(err => {
-        // Error al copiar
-        console.error('Error al copiar al portapapeles: ', err);
-        const shareButtonText = document.getElementById('share-button-text');
-        const originalText = shareButtonText.textContent;
-        shareButtonText.textContent = 'Error al copiar';
-        setTimeout(() => {
-          shareButtonText.textContent = originalText;
-        }, 2000);
-      });
+            setTimeout(() => {
+              shareButtonText.textContent = originalText;
+              shareButton.querySelector('i').className = originalIcon;
+              shareButton.classList.remove('bg-green-200');
+            }, 2000); // Revertir después de 2 segundos
+          }).catch(err => {
+            // Error al copiar
+            console.error('Error al copiar al portapapeles: ', err);
+            const shareButtonText = document.getElementById('share-button-text');
+            const originalText = shareButtonText.textContent;
+            shareButtonText.textContent = 'Error al copiar';
+            setTimeout(() => {
+              shareButtonText.textContent = originalText;
+            }, 2000);
+          });
+        })
+        .catch(err => {
+          console.error('Error al acortar URL:', err);
+        });
     }
 
 
